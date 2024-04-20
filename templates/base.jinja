@@ -1,0 +1,35 @@
+<!-- 
+All pages inherit from this page, this is the "base" page. 
+Think of Java inheritance, but for web pages, eww... 
+
+Contains script tags that tells the browser where to locate the JQuery scripts.
+This code is pretty gross since everything is imported globally, if you're familiar with Python
+this is equivalent to a bunch of glob imports -> import * from jquery. 
+
+Yeah I know it's pretty ugly...
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title | default('Welcome!') }}</title>
+    <!-- Assuming your CSS file is located at '/static/css/style.css'. Adjust if your path is different. -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/libs/axios.min.js"></script>
+    <script src="/static/js/libs/jquery.min.js"></script>
+    <script src="/static/js/libs/js.cookie.min.js"></script>
+</head>
+<body>
+    {% if get_flashed_messages() %}
+        <ul class="flashes">
+        {% for message in get_flashed_messages() %}
+            <li>{{ message }}</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+    
+    <!-- The content from any other page goes here -->
+    {% block content %} {% endblock %}
+</body>
+</html>

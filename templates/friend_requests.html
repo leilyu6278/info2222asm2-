@@ -1,0 +1,26 @@
+{% extends 'base.jinja' %}
+{% block content %}
+<h1>Friend Requests</h1>
+<div>
+    <h2>Received Requests</h2>
+    <ul>
+        {% for request in received_requests %}
+        <li>
+            {{ request.sender_username }} -
+            <button onclick="respondToRequest({{ request.id }}, 'Accept')">Accept</button>
+            <button onclick="respondToRequest({{ request.id }}, 'Reject')">Reject</button>
+
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    // Update the respondToRequest function
+// function to respond to a friend request
+
+
+
+</script>
+{% endblock %}

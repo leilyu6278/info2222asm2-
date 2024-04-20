@@ -1,0 +1,294 @@
+{% extends 'base.jinja' %}
+
+
+{% block content %}
+    <style>
+        nav {
+            border-bottom: 1px solid black;
+            overflow: auto;
+        }
+
+        .container {
+            display: flex;
+            justify-content: space-between; /* aligns children main/aside side by side */
+        }
+
+        main {
+            flex: 2;
+        }
+
+        aside {
+            flex: 1;
+            width: 150px;
+            border: 1px solid black;
+            height: 400px;
+            overflow: auto;
+            padding: 2px;
+        }
+
+        #message_box {
+            border: 1px solid black;
+            height: 400px;
+            overflow: auto;
+            padding: 2px;
+            margin-right: 20px;
+        }
+
+        .text {
+            margin-top: 2px;
+            margin-bottom: 2px;
+        }
+
+        #friend_list {
+            border: 1px solid black;
+            height: 400px; /* same as chatbox */
+            width: 200px;
+            overflow: auto; /* allows scrolling if the list is long */
+            padding: 2px;
+        }
+    </style>
+
+    <!--Navbar, you'll see the username here-->
+    <nav style="border-bottom: 1px solid black;">
+        <ol style="float: right">
+            <li style="display:inline-block">Username: {{ username }} </li>
+        </ol>
+    </nav>
+
+    <h1>Messaging App </h1>
+
+    <div class="container">
+        <main>
+            <!-- The messages are displayed here -->
+            <section id="message_box"></section>
+
+            <!-- These part ideally should be a form element,
+            but I wrote this code a year ago and I don't want to break anything...-->
+            <section id="chat_box">
+                <p class="text">Chat with: </p>
+                <input id="receiver" placeholder="username">
+                <!-- MDN says its bad practice to use the onclick attribute,
+                but we're using it anyways coz its easy :)-->
+                <button onclick="join_room()">Chat</button>
+            </section>
+
+            <!-- The (message) input box is set to display: none initially,
+            this means the input box is "invisible" initially-->
+            <section id="input_box">    <!-- style="display: none" -->
+                <p class="text">Message: </p>
+                <input id="message" placeholder="message">
+                <button onclick="send()">Send</button>
+                <button onclick="leave()">Leave Room</button>
+            </section>
+        </main>
+        <!-- show plain friends list -->
+        <aside id="friend_list">
+            <h2>Friends</h2>
+
+            <!-- Add Friend Form -->
+            <form id="add-friend-form" action="{{ url_for('add_friend') }}" method="post" style="display: none;">
+                <input type="text" id="add-friend-username" name="friend_username"
+                       placeholder="Enter friend's username">
+                <button type="button" onclick="submitAddFriendForm()">Add Friend</button>
+            </form>
+
+            <button type="button" onclick="toggleAddFriendForm()">+ Add Friend</button>
+
+            <!-- Friend Requests Section -->
+            <h2>Friend Requests</h2>
+            <ul>
+                {% for request in received_requests %}
+                    <li>
+                        {{ request.sender_username }} -
+                        <button onclick="respondToRequest({{ request.id }}, 'Accept')">Accept</button>
+                        <button onclick="respondToRequest({{ request.id }}, 'Reject')">Reject</button>
+                    </li>
+                {% endfor %}
+            </ul>
+
+            <h2>Friends List</h2>
+            <ul>
+                {% for friend in friends %}
+                    <li onclick="startChatWithFriend('{{ friend }}')">{{ friend }}</li>
+                {% endfor %}
+            </ul>
+
+
+        </aside>
+    </div>
+
+    <script src="/static/js/libs/socket.io.min.js"></script>
+    <script>
+        let room_id = 0;
+
+        // when the user presses the "Enter" key inside of the "message box",
+        // the message is sent to the server
+        $("#message").on("keyup", (e) => {
+            if (e.key == "Enter") {
+                send();
+            }
+        })
+
+        // when the user presses the enter key inside of the "receiver box"
+        // the user joins a (socket) room
+        $("#receiver").on("keyup", (e) => {
+            if (e.key == "Enter") {
+                join_room();
+            }
+        })
+
+
+        $(document).ready(() => {
+            // room_id is undefined if the user hasn't joined a room
+            // we early return in this case
+            if (Cookies.get("room_id") == undefined) {
+                return;
+            }
+
+            // the user has already joined an existing room
+            // we'll display the message box, instead of the "Chat with: " box
+            $("#chat_box").hide();
+            $("#input_box").show();
+            room_id = parseInt(Cookies.get("room_id"));
+        })
+
+        // Here's the Socket IO part of the code
+        // things get a bit complicated here so brace yourselves :P
+        let username = "{{ username }}";
+
+        Cookies.set('username', username);
+
+        // initializes the socket
+        const socket = io();
+
+        // an incoming message arrives, we'll add the message to the message box
+        socket.on("incoming", (msg, color = "black") => {
+            add_message(msg, color);
+        })
+
+        // we'll send the message to the server by emitting a "send" event
+        function send() {
+            let message = $("#message").val();
+            $("#message").val("");
+            socket.emit("send", username, message, room_id);
+        }
+
+        // we emit a join room event to the server to join a room
+        function join_room() {
+
+            let receiver = $("#receiver").val();
+
+            // pass in the receiver of our message to the server
+            // as well as the current user's username
+            socket.emit("join", username, receiver, (res) => {
+                // res is a string with the error message if the error occurs
+                // this is a pretty bad way of doing error handling, but watevs
+                if (typeof res != "number") {
+                    alert(res);
+                    return;
+                }
+
+                // set the room id variable to the room id returned by the server
+                room_id = res;
+                Cookies.set("room_id", room_id);
+
+                // now we'll show the input box, so the user can input their message
+                $("#chat_box").hide();
+                $("#input_box").show();
+            });
+
+        }
+
+        // function when the user clicks on "Leave Room"
+        // emits a "leave" event, telling the server that we want to leave the room
+        function leave() {
+            Cookies.remove("room_id");
+            socket.emit("leave", username, room_id);
+            $("#input_box").hide();
+            $("#chat_box").show();
+        }
+
+        // function to respond to a friend request (accept or reject)
+        function respondToRequest(requestId, action) {
+            console.log("Responding to friend request:", requestId, action);
+
+            // If the action is Reject, a confirmation box pops up
+            if (action === 'Reject') {
+                if (!confirm("Are you sure you want to reject a friend request？")) {
+                    return;
+                }
+            }
+
+            $.ajax({
+                url: '/respond-to-request',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({'request_id': requestId, 'action': action}),
+                success: function (response) {
+                    console.log("Response:", response);
+                    // Handle response as needed, such as removing the request from the UI
+                    $('#request-' + requestId).remove();
+                },
+                error: function (xhr) {
+                    console.error('Error:', xhr.responseText);
+                    alert('Error: ' + xhr.responseText);
+                }
+            });
+        }
+
+        // function to add a message to the message box
+        // called when an incoming message has reached a client
+        function add_message(message, color) {
+            let box = $("#message_box");
+            let child = $(`<p style="color:${color}; margin: 0px;"></p>`).text(message);
+            box.append(child);
+        }
+
+        // Toggle the add friend form
+        function toggleAddFriendForm() {
+            $('#add-friend-form').toggle();
+        }
+
+        // Submit the add friend form
+        function submitAddFriendForm() {
+            console.log("Submitting add friend form...");
+            const friendUsername = $('#add-friend-username').val();
+            console.log("Friend username:", friendUsername);
+            if (!friendUsername) {
+                alert('Please enter a username.');
+                return;
+            }
+
+            // Call send_friend_request to send a friend request
+            send_friend_request(friendUsername);
+        }
+
+        // Send a friend request to the server
+        function send_friend_request(friendUsername) {
+            console.log("Sending friend request to:", friendUsername);
+            $.ajax({
+                url: '/send-friend-request',
+                type: 'POST',
+                data: {'username': friendUsername}, // Send the friend's user name as a parameter
+                success: function (response) {
+                    console.log("Friend request response:", response);
+                    alert(response.message);
+                    $('#add-friend-form').hide();
+                    $('#add-friend-username').val('');
+                },
+                error: function (xhr) {
+                    console.error('Error:', xhr.responseText);
+                    alert('Error: ' + xhr.responseText);
+                }
+            });
+        }
+
+
+        function startChatWithFriend(friendUsername) {
+            // Set the recipient's input field to the friend's username
+            $("#receiver").val(friendUsername);
+            // Automatically join a chat room with that friend
+            join_room();
+        }
+    </script>
+{% endblock %}
